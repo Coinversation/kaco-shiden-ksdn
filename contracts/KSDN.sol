@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Unlicense
+//SPDX-License-Identifier: GPLv3
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
