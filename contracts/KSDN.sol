@@ -28,7 +28,7 @@ contract KSDN is ERC20, Ownable {
         lastClaimedEra = _lastClaimedEra;
     }
 
-    function getRatio() external view returns (uint){
+    function getRatio() public view returns (uint){
         uint ksdnSupply = totalSupply();
         if(ksdnSupply == 0){
             return RATIO_PRECISION;
@@ -49,6 +49,7 @@ contract KSDN is ERC20, Ownable {
         return gapEras;
     }
 
+    //return: the ratio before this deposit operation.
     function claimAndReinvest(uint depositSDN) internal returns (uint){
         uint[] memory gapEras = erasToClaim();
         if(gapEras.length > 0){
@@ -67,14 +68,19 @@ contract KSDN is ERC20, Ownable {
             uint stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
             require(stakedAmount >= stakedSDN + _balance, "invalid stakedAmount");
             stakedSDN = stakedAmount;
-            if(_balance > depositSDN){
-                uint ratio = (stakedAmount - depositSDN) * RATIO_PRECISION / totalSupply();
-                _mint(feeTo, ((_balance - depositSDN) * fee / 10000 ) * RATIO_PRECISION / ratio); //mint fee
-                return ratio;
-            }
-        }
 
-        return stakedSDN * RATIO_PRECISION / totalSupply();
+            uint ksdnSupply = totalSupply();
+            uint ratio = RATIO_PRECISION;
+            if(ksdnSupply > 0){
+                ratio = (stakedAmount - depositSDN) * RATIO_PRECISION / ksdnSupply;
+            }
+            if(_balance - depositSDN > 0){
+                _mint(feeTo, ((_balance - depositSDN) * fee / 10000 ) * RATIO_PRECISION / ratio); //mint fee
+            }
+            return ratio;
+        }else{
+            return getRatio();
+        }
     }
 
     /**
