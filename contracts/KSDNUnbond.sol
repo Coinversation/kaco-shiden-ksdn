@@ -3,38 +3,64 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./DappsStaking.sol";
 
-contract KSDNUnbond is ERC20, Ownable {
-    uint public stakedSDN;
+contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
+    struct WithdrawRecord{
+        uint blockNum; 
+        address account;
+        uint amount;
+    }
 
-    uint public fee; //unit: 0.0001
-    address public feeTo;
-
-    uint public lastClaimedEra;
     DappsStaking public constant DAPPS_STAKING = DappsStaking(0x0000000000000000000000000000000000005001);
     address public constant KACO_ADDRESS = 0xcd8620889c1dA22ED228e6C00182177f9dAd16b7;
     uint public constant RATIO_PRECISION = 100000000; //precision: 0.00000001
+
+    uint public fee; //unit: 0.0001
+    address public feeTo;
+    uint public unbondingPeriod;
+
+    uint public lastClaimedEra;
+    uint public prevUnstakeSDN;
+    uint public ratio = RATIO_PRECISION;
+
+    WithdrawRecord[] public records;
+    uint public recordsIndex;
+    uint public toWithdrawSDN;
+
+    //todo add some events
 
     constructor(
         string memory name,
         string memory symbol,
         uint _fee,
         address _feeTo,
-        uint _lastClaimedEra
+        uint _lastClaimedEra,
+        uint _unbondingPeriod
     ) ERC20(name, symbol) {
         fee = _fee;
         feeTo = _feeTo;
         lastClaimedEra = _lastClaimedEra;
+        unbondingPeriod = _unbondingPeriod;
     }
 
-    function getRatio() public view returns (uint){
-        uint ksdnSupply = totalSupply();
-        if(ksdnSupply == 0){
-            return RATIO_PRECISION;
+    function getWithdrawRecords(uint _startIndex, uint _capacity) external view returns(WithdrawRecord[] memory){
+        uint _recordsLength = records.length;
+        uint _endIndex;
+        if(_startIndex + _capacity - 1 > _recordsLength){
+            _endIndex = _recordsLength;
         }else{
-            return stakedSDN * RATIO_PRECISION / ksdnSupply;
+            _endIndex = _startIndex + _capacity - 1;
         }
+
+        WithdrawRecord[] memory result = new WithdrawRecord[](_endIndex - _startIndex);
+        uint j;
+        for(uint i = _startIndex; i < _endIndex; i++){
+            result[j] = records[i];
+            j++;
+        }
+        return result;
     }
 
     function erasToClaim() public view returns (uint[] memory){
@@ -49,40 +75,62 @@ contract KSDNUnbond is ERC20, Ownable {
         return gapEras;
     }
 
-    //return: the ratio before this deposit operation.
-    function claimAndReinvest(uint depositSDN) internal returns (uint){
+    function claimAndTransfer(uint depositSDN) internal nonReentrant{
+        //claim and update lastClaimedEra
         uint[] memory gapEras = erasToClaim();
         if(gapEras.length > 0){
-            for(uint i = 0; i < gapEras.length; i++){
-                uint128 toClaimEra = uint128(gapEras[i]);
+            for(uint j = 0; j < gapEras.length; j++){
+                uint128 toClaimEra = uint128(gapEras[j]);
                 DAPPS_STAKING.claim(KACO_ADDRESS, toClaimEra);
             }
-            //todo: should wait
-            DAPPS_STAKING.withdraw_unbonded();
             lastClaimedEra = gapEras[gapEras.length - 1];
         }
-        uint _balance = address(this).balance;
-        require(_balance >= depositSDN, "invalid depositSDN");
-        if(_balance > 0){
-            //todo: confirm if the address(this).balance will minus the corresponding locked amount
-            DAPPS_STAKING.bond_and_stake(KACO_ADDRESS, uint128(_balance));
-            //todo: if the stakedAmount increased
-            uint stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
-            require(stakedAmount >= stakedSDN + _balance, "invalid stakedAmount");
-            stakedSDN = stakedAmount;
 
+        //calc unstakeAmount
+        DAPPS_STAKING.withdraw_unbonded();
+        uint _balance = address(this).balance;
+        uint _unbondingAmount = DAPPS_STAKING.read_unbonding_period();
+        uint _nowUnstakeSDN = _balance + _unbondingAmount - depositSDN;
+
+        //calc dAppsStaking reward
+        uint rewardAmount = (_nowUnstakeSDN - prevUnstakeSDN);
+
+        if(rewardAmount > 0){
+            //update ratio
             uint ksdnSupply = totalSupply();
-            uint ratio = RATIO_PRECISION;
+            uint _stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
             if(ksdnSupply > 0){
-                ratio = (stakedAmount - depositSDN) * RATIO_PRECISION / ksdnSupply;
+                ratio = (_stakedAmount + _nowUnstakeSDN - toWithdrawSDN) * RATIO_PRECISION / ksdnSupply;
             }
-            if(_balance - depositSDN > 0){
-                _mint(feeTo, ((_balance - depositSDN) * fee / 10000 ) * RATIO_PRECISION / ratio); //mint fee
-            }
-            return ratio;
-        }else{
-            return getRatio();
+
+            //mint fee
+            _mint(feeTo, (rewardAmount * fee / 10000 ) * RATIO_PRECISION / ratio); //mint fee
         }
+
+        //proceeding maturing records
+        uint _recordsLength = records.length;
+        uint _recordsIndex = recordsIndex;
+        uint i = _recordsIndex;
+        uint withdrawedAmount;
+        for(; i < _recordsLength; i++){
+            WithdrawRecord storage _record = records[i];
+            if(block.number - _record.blockNum > unbondingPeriod){
+                //transfer
+                _record.account.call{value: _record.amount}("");
+                withdrawedAmount += _record.amount;
+            }else{
+                break;
+            }
+        }
+        if(i > _recordsIndex){
+            toWithdrawSDN -= withdrawedAmount;
+            recordsIndex = _recordsIndex + i;
+        }
+    }
+
+    function stakeRemaining() internal{
+        DAPPS_STAKING.bond_and_stake(KACO_ADDRESS, uint128(address(this).balance));
+        prevUnstakeSDN = DAPPS_STAKING.read_unbonding_period();
     }
 
     /**
@@ -92,7 +140,8 @@ contract KSDNUnbond is ERC20, Ownable {
         external
         payable
     {
-        uint ratio = claimAndReinvest(msg.value);
+        claimAndTransfer(msg.value);
+        stakeRemaining();
         if(msg.value > 0){
             _mint(account, msg.value * RATIO_PRECISION / ratio);
         }
@@ -104,21 +153,29 @@ contract KSDNUnbond is ERC20, Ownable {
     function withdrawTo(address payable account, uint ksdnAmount)
         external
     {
-        uint ratio = claimAndReinvest(0);
+        claimAndTransfer(0);
         _burn(_msgSender(), ksdnAmount);
         uint sdnAmount = ksdnAmount * ratio  / RATIO_PRECISION;
         require(sdnAmount <= type(uint128).max, "too large amount");
+
+        //save new record
+        WithdrawRecord storage _newRecord = records.push();
+        _newRecord.account = account;
+        _newRecord.amount = sdnAmount;
+        _newRecord.blockNum = block.number;
+        toWithdrawSDN += sdnAmount;
+        
         DAPPS_STAKING.unbond_and_unstake(KACO_ADDRESS, uint128(sdnAmount));
-        //todo: should wait?
-        DAPPS_STAKING.withdraw_unbonded();
-        uint _balance = address(this).balance;
-        require(_balance >= sdnAmount, "not enough SDN");
-        (bool sent, bytes memory data) = account.call{value: sdnAmount}("");
-        require(sent, "Failed to send SDN");
+
+        stakeRemaining();
     }
 
     function setFee(uint _fee, address _feeTo) external onlyOwner{
         fee = _fee;
         feeTo = _feeTo;
+    }
+
+    function updateUnbondingPeriod(uint _unbondingPeriod) external onlyOwner{
+        unbondingPeriod = _unbondingPeriod;
     }
 }

@@ -11,6 +11,10 @@ interface DappsStaking {
     /// @return The current era
     function read_current_era() external view returns (uint256);
 
+    /// @dev Read unbonding period constant.
+    /// @return The unbonding period
+    function read_unbonding_period() external view returns (uint256);
+
     /// @dev Read Total network reward for the given era
     /// @return Total network reward for the given era
     function read_era_reward(uint32 era) external view returns (uint128);
@@ -22,10 +26,6 @@ interface DappsStaking {
     /// @dev Read Staked amount for the staker
     /// @return Staked amount for the staker
     function read_staked_amount(address staker) external view returns (uint128);
-
-    /// @dev Read stakers on the contract in the given era
-    /// @return The array of stakers in the given era
-    function read_contract_era_stakers(address contract_id, uint32 era) external view returns (uint256[] memory);
 
     /// @dev Read the amount staked on contract in the given era
     /// @return The amount staked on contract in the given era
