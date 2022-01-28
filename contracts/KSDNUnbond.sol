@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./DappsStaking.sol";
 
-contract KSDN is ERC20, Ownable {
+contract KSDNUnbond is ERC20, Ownable {
     uint public stakedSDN;
 
     uint public fee; //unit: 0.0001
