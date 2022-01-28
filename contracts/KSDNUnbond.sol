@@ -16,6 +16,7 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
     DappsStaking public constant DAPPS_STAKING = DappsStaking(0x0000000000000000000000000000000000005001);
     address public constant KACO_ADDRESS = 0xcd8620889c1dA22ED228e6C00182177f9dAd16b7;
     uint public constant RATIO_PRECISION = 100000000; //precision: 0.00000001
+    uint public constant FEE_PRECISION = 10000;
 
     uint public fee; //unit: 0.0001
     address public feeTo;
@@ -104,7 +105,7 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
             }
 
             //mint fee
-            _mint(feeTo, (rewardAmount * fee / 10000 ) * RATIO_PRECISION / ratio); //mint fee
+            _mint(feeTo, (rewardAmount * fee / FEE_PRECISION ) * RATIO_PRECISION / ratio); //mint fee
         }
 
         //proceeding maturing records
