@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./DappsStaking.sol";
 
-contract KSDNUnbondV1 is ERC20, Ownable, ReentrancyGuard {
+contract KSDNUnbondV2 is ERC20, Ownable, ReentrancyGuard {
     struct WithdrawRecord{
         uint blockNum; 
         address account;
@@ -30,8 +30,7 @@ contract KSDNUnbondV1 is ERC20, Ownable, ReentrancyGuard {
     uint public recordsIndex;
     uint public toWithdrawSDN;
 
-    //todo add some events
-    event PoolUpdate(uint indexed _recordsIndex, uint _ksdn, uint _ratio);
+    event PoolUpdate(uint _recordsIndex, uint _ksdn, uint _ratio);
 
 
     constructor(
@@ -161,6 +160,7 @@ contract KSDNUnbondV1 is ERC20, Ownable, ReentrancyGuard {
     function withdrawTo(address payable account, uint ksdnAmount)
         external
     {
+        require(ksdnAmount > 0, "ksdnAmount 0");
         claimAndTransfer(0);
         _burn(_msgSender(), ksdnAmount);
         uint sdnAmount = ksdnAmount * ratio  / RATIO_PRECISION;
