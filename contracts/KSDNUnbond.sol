@@ -31,6 +31,8 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
     uint public toWithdrawSDN;
 
     //todo add some events
+    event PoolUpdate(uint indexed _recordsIndex, uint _ksdn, uint _ratio);
+
 
     constructor(
         string memory name,
@@ -99,8 +101,8 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         if(rewardAmount > 0){
             //update ratio
             uint ksdnSupply = totalSupply();
-            uint _stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
             if(ksdnSupply > 0){
+                uint _stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
                 ratio = (_stakedAmount + _nowUnstakeSDN - toWithdrawSDN) * RATIO_PRECISION / ksdnSupply;
             }
 
@@ -125,13 +127,18 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         }
         if(i > _recordsIndex){
             toWithdrawSDN -= withdrawedAmount;
-            recordsIndex = _recordsIndex + i;
+            recordsIndex =  i;
         }
     }
 
     function stakeRemaining() internal{
-        DAPPS_STAKING.bond_and_stake(KACO_ADDRESS, uint128(address(this).balance));
+        uint128 _balance = uint128(address(this).balance);
+        if(_balance > 0){
+            DAPPS_STAKING.bond_and_stake(KACO_ADDRESS, _balance);
+        }
         prevUnstakeSDN = DAPPS_STAKING.read_unbonding_period();
+
+        emit PoolUpdate(recordsIndex, totalSupply(), ratio);
     }
 
     /**
@@ -142,10 +149,10 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         payable
     {
         claimAndTransfer(msg.value);
-        stakeRemaining();
         if(msg.value > 0){
             _mint(account, msg.value * RATIO_PRECISION / ratio);
         }
+        stakeRemaining();
     }
 
     /**
