@@ -83,7 +83,9 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         if(gapEras.length > 0){
             for(uint j = 0; j < gapEras.length; j++){
                 uint128 toClaimEra = uint128(gapEras[j]);
-                DAPPS_STAKING.claim(KACO_ADDRESS, toClaimEra);
+                //todo verify if try/catch work.
+                try DAPPS_STAKING.claim(KACO_ADDRESS, toClaimEra){}
+                catch {}
             }
             lastClaimedEra = gapEras[gapEras.length - 1];
         }
@@ -99,14 +101,12 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
 
         if(rewardAmount > 0){
             //update ratio
-            uint ksdnSupply = totalSupply();
-            if(ksdnSupply > 0){
-                uint _stakedAmount = DAPPS_STAKING.read_staked_amount(KACO_ADDRESS);
-                ratio = (_stakedAmount + _nowUnstakeSDN - toWithdrawSDN) * RATIO_PRECISION / ksdnSupply;
-            }
+            //todo veirfy param and return of read_staked_amount
+            uint _stakedAmount = DAPPS_STAKING.read_staked_amount(address(this));
+            ratio = (_stakedAmount + _nowUnstakeSDN - toWithdrawSDN) * RATIO_PRECISION / totalSupply();
 
             //mint fee
-            _mint(feeTo, (rewardAmount * fee / FEE_PRECISION ) * RATIO_PRECISION / ratio); //mint fee
+            _mint(feeTo, (rewardAmount * fee / FEE_PRECISION ) * RATIO_PRECISION / ratio);
         }
 
         //proceeding maturing records
