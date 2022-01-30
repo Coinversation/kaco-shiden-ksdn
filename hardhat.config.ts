@@ -45,7 +45,7 @@ const config: HardhatUserConfig = {
       gasPrice: 1000000000,
       accounts: {mnemonic: mnemonic}
     },
-    mainnet: {
+    shidenmainnet: {
       url: "https://rpc.shiden.astar.network:8545",
       chainId: 336,
       gasPrice: 1000000000,

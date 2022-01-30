@@ -14,12 +14,12 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const Greeter = await ethers.getContractFactory("Greeter");
-  const greeter = await Greeter.deploy("Hello, Hardhat!");
+  const KSDNUnbond = await ethers.getContractFactory("KSDNUnbond");
+  const kSDN = await KSDNUnbond.deploy("kaco wrapped SDN", "kSDN", 10000, "0xFB83a67784F110dC658B19515308A7a95c2bA33A", 87, 7200 * 2);
 
-  await greeter.deployed();
+  await kSDN.deployed();
 
-  console.log("Greeter deployed to:", greeter.address);
+  console.log("Greeter deployed to:", kSDN.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
