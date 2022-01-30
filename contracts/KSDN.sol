@@ -113,7 +113,7 @@ contract KSDN is ERC20, Ownable {
         DAPPS_STAKING.withdraw_unbonded();
         uint _balance = address(this).balance;
         require(_balance >= sdnAmount, "not enough SDN");
-        (bool sent, bytes memory data) = account.call{value: sdnAmount}("");
+        (bool sent,) = account.call{value: sdnAmount}("");
         require(sent, "Failed to send SDN");
     }
 

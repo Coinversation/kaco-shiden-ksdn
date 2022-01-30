@@ -186,4 +186,9 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
     function updateUnbondingPeriod(uint _unbondingPeriod) external onlyOwner{
         unbondingPeriod = _unbondingPeriod;
     }
+
+    function calcDailyApr() external view returns(uint){
+        uint32 era = uint32(DAPPS_STAKING.read_current_era() - 1);
+        return DAPPS_STAKING.read_era_reward(era) * RATIO_PRECISION / DAPPS_STAKING.read_era_staked(era);
+    }
 }
