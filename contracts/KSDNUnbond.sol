@@ -8,7 +8,7 @@ import "./DappsStaking.sol";
 
 contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
     struct WithdrawRecord{
-        uint blockNum; 
+        uint era;   //the era started unbonding.
         address account;
         uint amount;
     }
@@ -65,10 +65,11 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         return result;
     }
 
+    //return: the last is current era;
     function erasToClaim() public view returns (uint[] memory){
         uint currentEra = DAPPS_STAKING.read_current_era();
         uint toClaimEra = lastClaimedEra + 1;
-        uint gap = currentEra - toClaimEra;
+        uint gap = currentEra - toClaimEra + 1;
         uint[] memory gapEras = new uint[](gap);
         for(uint i = 0; i < gap; i++){
             gapEras[i] = toClaimEra;
@@ -77,17 +78,18 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         return gapEras;
     }
 
-    function claimAndTransfer(uint depositSDN) internal nonReentrant{
+    function claimAndTransfer(uint depositSDN) internal nonReentrant returns (uint){
         //claim and update lastClaimedEra
         uint[] memory gapEras = erasToClaim();
-        if(gapEras.length > 0){
-            for(uint j = 0; j < gapEras.length; j++){
+        uint currentEra = gapEras[gapEras.length - 1];
+        if(gapEras.length > 1){
+            for(uint j = 0; j < gapEras.length - 1; j++){
                 uint128 toClaimEra = uint128(gapEras[j]);
                 //todo verify if try/catch work.
                 try DAPPS_STAKING.claim(KACO_ADDRESS, toClaimEra){}
                 catch {}
             }
-            lastClaimedEra = gapEras[gapEras.length - 1];
+            lastClaimedEra = currentEra - 1;
         }
 
         //calc unstakeAmount
@@ -116,7 +118,7 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         uint withdrawedAmount;
         for(; i < _recordsLength; i++){
             WithdrawRecord storage _record = records[i];
-            if(block.number - _record.blockNum > unbondingPeriod){
+            if(currentEra - _record.era >= unbondingPeriod){
                 //transfer
                 _record.account.call{value: _record.amount}("");
                 withdrawedAmount += _record.amount;
@@ -128,6 +130,8 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
             toWithdrawSDN -= withdrawedAmount;
             recordsIndex =  i;
         }
+
+        return currentEra;
     }
 
     function stakeRemaining() internal{
@@ -161,7 +165,7 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         external
     {
         require(ksdnAmount > 0, "ksdnAmount 0");
-        claimAndTransfer(0);
+        uint currentEra = claimAndTransfer(0);
         _burn(_msgSender(), ksdnAmount);
         uint sdnAmount = ksdnAmount * ratio  / RATIO_PRECISION;
         require(sdnAmount <= type(uint128).max, "too large amount");
@@ -170,7 +174,7 @@ contract KSDNUnbond is ERC20, Ownable, ReentrancyGuard {
         WithdrawRecord storage _newRecord = records.push();
         _newRecord.account = account;
         _newRecord.amount = sdnAmount;
-        _newRecord.blockNum = block.number;
+        _newRecord.era = currentEra;
         toWithdrawSDN += sdnAmount;
         
         DAPPS_STAKING.unbond_and_unstake(KACO_ADDRESS, uint128(sdnAmount));
